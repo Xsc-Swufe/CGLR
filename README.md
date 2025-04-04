@@ -9,7 +9,10 @@ Due to space constraints, we have uploaded the Chinese stock market data on Baid
 ## Requirements
 
 Python == 3.11  
+
 torch == 2.0.1 
+
 torchvision == 0.15.2  
+
 numpy == 1.24.4  
  
