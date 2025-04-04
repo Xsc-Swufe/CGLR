@@ -36,9 +36,7 @@ class GATMechanism(nn.Module):
         return H
 
     def compute_attention(self, V_i, V_j, time_enc):
-        """
-        计算节点对之间的注意力权重
-        """
+        
         V_i_transformed = self.W(V_i)  # [N, N, F']
         V_j_transformed = self.W(V_j)  # [N, N, F']
         feature_concat = torch.cat([V_i_transformed, V_j_transformed, time_enc], dim=-1).float()  # [N, N, 2F' + F]
@@ -51,7 +49,7 @@ class GATMechanism(nn.Module):
 class ConditionGraphRoutingNetwork(nn.Module):
     def __init__(self, rnn_unit, n_hid, K, Top_K):
         """
-        初始化 CGRN
+         CGRN
         :param rnn_unit:  (F)
         :param n_hid:  (F')
         :param K:  (L)
@@ -63,7 +61,7 @@ class ConditionGraphRoutingNetwork(nn.Module):
         self.Top_K = Top_K
         self.rnn_unit = rnn_unit  # F
 
-        # 单一 W_a 参数，用于一次性计算 L 个机制的分数
+       
         self.W_a = nn.Parameter(torch.randn(K, 3 * rnn_unit))  # [L, 3F]
    
         self.gat_layers = nn.ModuleList([GATMechanism(rnn_unit, n_hid) for _ in range(K)])
