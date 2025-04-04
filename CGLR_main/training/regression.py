@@ -24,7 +24,7 @@ parser.add_argument('--accumulation_steps', type=int, default=64, help='Gradient
 parser.add_argument('-length', default=12,
                         help='length of historical sequence for feature')
 
-parser.add_argument('-feature', default=9, help='input_size') #代表我输入数据的特征维度，假如要经过一个线性层则需要从8变换到别的维度
+parser.add_argument('-feature', default=9, help='input_size') 
 parser.add_argument('-n_class', default=1, help='output_size')
 parser.add_argument('-epoch', type=int, default=300)
 parser.add_argument('-batch_size', type=int, default=32)
@@ -45,22 +45,22 @@ parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='be
 parser.add_argument('-no_cuda', action='store_true')
 parser.add_argument('-label_smoothing', default='True')
 parser.add_argument('-n_warmup_steps', type=int, default=4000)
-# 权重的L2约束。
+
 parser.add_argument('--weight-constraint', type=float, default='5e-4',
                         help='L2 weight constraint')
-    # 梯度裁剪（gradient clipping）。
+
 parser.add_argument('--clip', type=float, default='0.5',
                         help='rnn clip')
-    # 学习率。
+
 parser.add_argument('--lr', type=float, default='5e-4',  #5e-4
                         help='Learning rate ')
 
 parser.add_argument('-steps', default=1,
                         help='steps to make prediction')
-    # --save: 是否保存模型。
+
 parser.add_argument('--save', type=bool, default=True,
                         help='save model')
-    # --soft-training: 是否进行软训练。可能是正则项？
+
 parser.add_argument('--soft-training', type=int, default='0',
                         help='0 False. 1 True')
 
@@ -80,10 +80,9 @@ if args.cuda:
 
 args.cuda = not args.no_cuda
 device = torch.device('cuda' if args.cuda else 'cpu')
-# load data
-# features shape: [Months, Firms, Dimension of features]
+
 features, labels = load_data()
-# 转换为 PyTorch 张量
+
 features = torch.tensor(features, dtype=torch.float32)
 labels = torch.tensor(labels, dtype=torch.float32)
 features = features.to(device)
@@ -91,9 +90,6 @@ labels = labels.to(device)
 labels = torch.transpose(labels, 1, 0)
 labels = labels*100
 
-#features = features[:, :, :10]  #为了测试压缩特征以减少时间，这是我自己填的
-# Model and optimizer
-# Split data
 rnn_length = args.length
 train_end_time = int(len(features)*0.7)
 val_end_time = int(len(features)*0.9)
@@ -184,7 +180,7 @@ def train(epoch, lag_matrix, lead_lag_diff, lag_matrix2, lead_lag_diff2):
     r2_val = R2_score_calculate(np.array(phase_label_val), np.array(phase_pred_val))
     rank_ic_val, rank_ic_ir_val = IC_ICIR_score_calculate(phase_label_val, phase_pred_val, len(eval_seq))
 
-    # 返回训练损失和验证集评估指标
+
     return total_loss / count_train, mse_val, r2_val, rank_ic_val, rank_ic_ir_val
 
 
@@ -203,7 +199,6 @@ def compute_test(lag_matrix3, lead_lag_diff3):
     r2_test = R2_score_calculate(np.array(phase_label_test), np.array(phase_pred_test))
     rank_ic_test, rank_ic_ir_test = IC_ICIR_score_calculate(phase_label_test, phase_pred_test, len(test_seq))
 
-    # 返回测试集评估指标
     return mse_test, r2_test, rank_ic_test, rank_ic_ir_test
 
 
@@ -215,18 +210,15 @@ best = -100
 best_epoch = 0
 
 for epoch in range(args.epoch):
-    # 训练并获取训练和验证集指标
     train_loss, mse_val, r2_val, rank_ic_val, rank_ic_ir_val = train(
         epoch, lag_matrix, lead_lag_diff, lag_matrix2, lead_lag_diff2
     )
     r2_values.append(r2_val)
 
-    # 测试集评估
     mse_test, r2_test, rank_ic_test, rank_ic_ir_test = compute_test(
         lag_matrix3, lead_lag_diff3
     )
 
-    # 打印日志
     epoch_time = time.time() - t_total
     print('Epoch: {:04d}'.format(epoch + 1),
           'train_loss: {:.4f}'.format(train_loss),
@@ -240,7 +232,6 @@ for epoch in range(args.epoch):
           'Rank_ICIR_test: {:.4f}'.format(rank_ic_ir_test),
           'epoch_time: {:.4f}s'.format(epoch_time))
 
-    # 更新最佳模型和早停逻辑
     if r2_values[-1] > best:
         best = r2_values[-1]
         best_epoch = epoch
@@ -254,11 +245,9 @@ for epoch in range(args.epoch):
 print("Optimization Finished!")
 print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
-# 恢复最佳模型
 print('Loading {}th epoch'.format(best_epoch))
 model.load_state_dict(torch.load('{}.pkl'.format(best_epoch)))
 
-# 最终测试集评估
 final_mse_test, final_r2_test, final_rank_ic_test, final_rank_ic_ir_test = compute_test(
     lag_matrix3, lead_lag_diff3
 )
