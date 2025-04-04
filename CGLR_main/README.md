@@ -3,7 +3,7 @@
 Unveiling Risk Propagation: A Lead-Lag-Aware Framework for Financial Market Prediction
 
 ## Dataset
-Due to space constraints, we have uploaded the Chinese stock market data on Baidu Cloud Drive, see
+Due to space constraints, we have uploaded the Chinese stock market data on Baidu Cloud Drive, see https://pan.baidu.com/s/1jlubLrEwb98GMKv0qgb-EQ?pwd=ayqp
 
 
 ## Requirements
