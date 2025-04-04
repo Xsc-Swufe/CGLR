@@ -13,8 +13,8 @@ import random
 class GATMechanism(nn.Module):
     def __init__(self, input_dim, output_dim):
         """
-        :param input_dim: 输入特征维度 (F)
-        :param output_dim: 输出特征维度 (F')
+        :param input_dim:  (F)
+        :param output_dim:  (F')
         """
         super(GATMechanism, self).__init__()
         self.W = nn.Linear(input_dim, output_dim)  # [F, F']
