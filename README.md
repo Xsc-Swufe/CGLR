@@ -16,3 +16,5 @@ torchvision == 0.15.2
 
 numpy == 1.24.4  
  
+## Contact
+Xiaosc123456@gmail.com
