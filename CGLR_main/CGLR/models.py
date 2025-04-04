@@ -55,11 +55,8 @@ class CGLR(nn.Module):
         self.First_module = TemporalChannelInteractionFusionModule(feature, rnn_unit,window_size, n_hid)
         self.second_module = NoiseAwareRelationInference(rnn_unit,n_hid, epsilon=1)
         self.cgrn = ConditionGraphRoutingNetwork(rnn_unit,n_hid, 15, 6)
-        self.ln = nn.LayerNorm(rnn_unit)
-        self.ln2 = nn.LayerNorm(n_hid)
         self.ln_in = nn.LayerNorm(feature)
-        self.ln3 = nn.LayerNorm(n_hid+rnn_unit)
-        self.ln5 = nn.LayerNorm(rnn_unit)
+
         self.out_1 = nn.Linear(n_hid+rnn_unit, n_hid)
         self.out_2 = nn.Linear(n_hid, n_class)
     def forward(self,src_seq1,matrix,matrix2):
@@ -70,12 +67,11 @@ class CGLR(nn.Module):
         # src_seq1_flat = src_seq1.view(-1, dim)
         # src_seq = self.ln_in(src_seq1_flat)
         # src_seq = src_seq.view(seq_len, stock_num, -1)
-        if torch.isnan(src_seq1).any():
-            print("src_seq1 中存在 NaN 值！")
+        
 
         # src_seq1rnn = src_seq1.permute(1, 0, 2)
         # _, rnn_output = self.rnn2(src_seq1rnn)
-        # rnn_output = self.ln5(rnn_output.squeeze(0))
+        
         # rnn_output = F.dropout(rnn_output, self.dropout, training=self.training)
 
 
