@@ -312,36 +312,32 @@ class TemporalChannelInteractionFusionModule(nn.Module):
 
     def time_interaction(self, x, gamma_tem):
         """
-       
         :param x:  (T, N, F)
         :param gamma_tem:  (T,)
-        :return: (T, N, F)
+        :return:  (T, N, F)
         """
         T, N, F = x.size()
-        
         S_tem = torch.zeros(T, N, F, device=x.device)
         for f in range(F):
-            temp = x[:, :, f]  # (T, N)
-            temp = torch.matmul(self.W_tem1, temp)  # (F', N)
-            temp = torch.matmul(self.W_tem2, temp)  # (T, N)
-            S_tem[:, :, f] = torch.sigmoid(temp) * gamma_tem.view(T, 1)  # (T, N)
+            temp = x[:, :, f] * gamma_tem.view(T, 1)  # (T, N)，apply gamma_tem
+            temp = torch.matmul(self.W_tem1, temp)  # (F', T) @ (T, N) -> (F', N)
+            temp = torch.matmul(self.W_tem2, temp)  # (T, F') @ (F', N) -> (T, N)
+            S_tem[:, :, f] = torch.sigmoid(temp)  # (T, N)
         return S_tem
 
     def channel_interaction(self, x, gamma_cha):
         """
-      
         :param x:  (T, N, F)
         :param gamma_cha:  (F,)
         :return:  (T, N, F)
         """
         T, N, F = x.size()
-        
         S_cha = torch.zeros(T, N, F, device=x.device)
         for t in range(T):
-            temp = x[t, :, :]  # (N, F)
-            temp = torch.matmul(temp, self.W_cha1)  # (N, F')
-            temp = torch.matmul(temp, self.W_cha2)  # (N, F)
-            S_cha[t, :, :] = torch.sigmoid(temp) * gamma_cha.view(1, F)  # (N, F)
+            temp = x[t, :, :] * gamma_cha.view(1, F)  # (N, F)，apply gamma_cha
+            temp = torch.matmul(temp, self.W_cha1)  # (N, F) @ (F, F') -> (N, F')
+            temp = torch.matmul(temp, self.W_cha2)  # (N, F') @ (F', F) -> (N, F)
+            S_cha[t, :, :] = torch.sigmoid(temp)  # (N, F)
         return S_cha
 
     def feature_fusion(self, S_tem, S_cha):
@@ -355,12 +351,11 @@ class TemporalChannelInteractionFusionModule(nn.Module):
 
     def dual_gate(self, S_fused):
         T, N, F = S_fused.size()
-        S_int = torch.zeros(T, N, self.n_hid, device=S_fused.device)
-        for t in range(T):
-            temp = S_fused[t, :, :]  # (N, F)
-            gate = torch.sigmoid(torch.matmul(temp, self.W_t.T))  # (N, F)
-            filter = torch.tanh(torch.matmul(temp, self.G_t.T))  # (N, F)
-            S_int[t, :, :] = gate * filter  # (N, F)
+        S_fused = S_fused.permute(0, 2, 1)  # (T, F, N)
+        gate = torch.sigmoid(torch.matmul(self.W_t, S_fused))  # (F', F) @ (T, F, N) -> (T, F', N)
+        filter = torch.tanh(torch.matmul(self.G_t, S_fused))  # (F', F) @ (T, F, N) -> (T, F', N)
+        S_int = gate * filter  # (F', N, T)
+        S_int = S_int.permute(0, 2, 1)  # (T, N, F')
         return S_int
 
 
