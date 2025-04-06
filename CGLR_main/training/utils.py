@@ -41,12 +41,12 @@ def compute_lead_lag(data, window_size):
     计算滞后步和平均滞后时间差。
 
     参数：
-        data (np.ndarray or torch.Tensor): 输入时间序列数据，形状为 (T, N, F)，T 为时间步长，N 为个体数，F 为特征数。
-        window_size (int): 窗口大小，用于限制滞后值的计算范围。
+        data (np.ndarray or torch.Tensor):  (T, N, F)，
+        window_size (int):
 
     返回：
-        lag_steps (np.ndarray): 最优滞后步矩阵，形状为 (N, N)。
-        avg_lag_diff (np.ndarray): 平均滞后时间差矩阵，形状为 (N, N)。
+        lag_steps (np.ndarray):  (N, N)。
+        avg_lag_diff (np.ndarray):  (N, N)。
     """
 
     '''
@@ -58,7 +58,7 @@ def compute_lead_lag(data, window_size):
 
     T, N, F = data.shape
 
-    # 初始化滞后步和平均滞后时间差矩阵
+
     lag_steps = np.zeros((N, N))
     avg_lag_diff = np.zeros((N, N))
     data_normalized = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
@@ -67,11 +67,11 @@ def compute_lead_lag(data, window_size):
     for i in range(N):
         for j in range(N):
             if i != j:
-                # 提取两个个体的时间序列
+               
                 x = data_normalized[:, i, :].mean(axis=-1)
                 y = data_normalized[:, j, :].mean(axis=-1)
 
-                # 快速傅里叶变换 (FFT)
+                
                 X_fft = np.fft.fft(x)
                 Y_fft = np.fft.fft(y)
 
