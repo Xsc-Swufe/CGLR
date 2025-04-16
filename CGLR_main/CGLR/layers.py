@@ -181,7 +181,7 @@ class NoiseAwareRelationInference(nn.Module):
 
         threshold = (1 / (self.epsilon)) * (E_mean)
 
-        filtered_E = torch.where(E >= threshold, E, torch.zeros_like(E))
+        filtered_E = torch.where(E >= threshold, 1, torch.zeros_like(E))
         return filtered_E
 
 
