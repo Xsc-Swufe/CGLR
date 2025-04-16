@@ -63,7 +63,6 @@ def compute_lead_lag(data, window_size):
     avg_lag_diff = np.zeros((N, N))
     data_normalized = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
 
-    # 对每对个体 (i, j) 计算滞后步和平均滞后时间差
     for i in range(N):
         for j in range(N):
             if i != j:
@@ -75,20 +74,15 @@ def compute_lead_lag(data, window_size):
                 X_fft = np.fft.fft(x)
                 Y_fft = np.fft.fft(y)
 
-                # 计算交叉功率谱密度
                 cross_spectrum = X_fft * np.conj(Y_fft)
 
-                # 计算互相关
                 cross_correlation = np.fft.ifft(cross_spectrum).real
 
-                # 限制在窗口范围内
                 mid = len(cross_correlation) // 2
                 relevant_range = np.concatenate((cross_correlation[-window_size:], cross_correlation[:window_size + 1]))
 
-                # 计算滞后步 (最优滞后步)
                 optimal_lag = np.argmax(np.abs(relevant_range)) - window_size
 
-                # 计算平均滞后时间差
                 abs_corr = np.abs(relevant_range)
                 avg_lag = np.sum(np.arange(-window_size, window_size + 1) * abs_corr) / np.sum(abs_corr)
 
