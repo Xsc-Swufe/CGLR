@@ -13,8 +13,9 @@ import random
 class GATMechanism(nn.Module):
     def __init__(self, input_dim, output_dim):
         """
-        :param input_dim:  (F)
-        :param output_dim:  (F')
+        GAT 机制，支持特征拼接
+        :param input_dim: 输入特征维度 (F)
+        :param output_dim: 输出特征维度 (F')
         """
         super(GATMechanism, self).__init__()
         self.W = nn.Linear(input_dim, output_dim)  # [F, F']
@@ -22,21 +23,23 @@ class GATMechanism(nn.Module):
 
     def forward(self, V, E, time_enc):
         """
-        :param V:  [N, F]
-        :param E:  [N, N]
-        :param time_enc:  [N, N, F]
-        :return:  [N, N, F']
+        :param V: 节点特征 [N, F]
+        :param E: 邻接矩阵 [N, N]
+        :param time_enc: 时间编码 [N, N, F]
+        :return: 加权消息 [N, N, F']
         """
         N = V.size(0)
         V_i = V.unsqueeze(1).repeat(1, N, 1)  # [N, N, F]
         V_j = V.unsqueeze(0).repeat(N, 1, 1)  # [N, N, F]
-        M = self.W(V_j)  # [N, N, F']，
+        M = self.W(V_j)  # [N, N, F']
         attention_scores = self.compute_attention(V_i, V_j, time_enc)  # [N, N]
         H = (attention_scores.unsqueeze(-1) * M) * E.unsqueeze(-1)  # [N, N, F']，
         return H
 
     def compute_attention(self, V_i, V_j, time_enc):
-        
+        """
+        计算节点对之间的注意力权重
+        """
         V_i_transformed = self.W(V_i)  # [N, N, F']
         V_j_transformed = self.W(V_j)  # [N, N, F']
         feature_concat = torch.cat([V_i_transformed, V_j_transformed, time_enc], dim=-1).float()  # [N, N, 2F' + F]
@@ -47,43 +50,63 @@ class GATMechanism(nn.Module):
 
 
 class ConditionGraphRoutingNetwork(nn.Module):
-    def __init__(self, rnn_unit, n_hid, K, Top_K):
+    def __init__(self, rnn_unit, n_hid, K, Top_K, T):
         """
-         CGRN
-        :param rnn_unit:  (F)
-        :param n_hid:  (F')
-        :param K:  (L)
-        :param Top_K
+        初始化 CGRN
+        :param rnn_unit: 输入特征维度 (F)
+        :param n_hid: 输出特征维度 (F')
+        :param K: 机制数量 (L)
+        :param Top_K: Top-K 策略
+        :param T: 最大时间窗口长度，用于确定超前滞后范围
         """
         super(ConditionGraphRoutingNetwork, self).__init__()
         self.n_hid = n_hid  # F'
         self.K = K  # L
         self.Top_K = Top_K
         self.rnn_unit = rnn_unit  # F
+        self.T = T  
 
-       
+      
+        self.register_buffer('PE', self.precompute_positional_encoding())
+
+
         self.W_a = nn.Parameter(torch.randn(K, 3 * rnn_unit))  # [L, 3F]
-   
+     
         self.gat_layers = nn.ModuleList([GATMechanism(rnn_unit, n_hid) for _ in range(K)])
-    
+      
         self.batch_norms = nn.ModuleList([nn.BatchNorm1d(n_hid) for _ in range(K)])
+
+    def precompute_positional_encoding(self):
+        """
+        预计算位置编码矩阵 PE
+        :return: PE [2T-1, F]
+        """
+        # 超前滞后范围：[-T+1, ..., 0, ..., T-1]
+        positions = torch.arange(-self.T + 1, self.T, dtype=torch.float32)  # [2T-1]
+        dim_t = torch.arange(0, self.rnn_unit // 2, dtype=torch.float32)  # [F/2]
+        div_term = 10000 ** (2 * dim_t / self.rnn_unit)  # [F/2]
+        sin_term = torch.sin(positions.unsqueeze(-1) / div_term)  # [2T-1, F/2]
+        cos_term = torch.cos(positions.unsqueeze(-1) / div_term)  # [2T-1, F/2]
+        pe = torch.cat([sin_term, cos_term], dim=-1)  # [2T-1, F]
+        return pe
 
     def time_encoding(self, delta_t):
         """
-        :param delta_t:  [N, N]
-        :return:  [N, N, F]
+        时间编码
+        :param delta_t: 滞后矩阵 [N, N]
+        :return: 时间编码 [N, N, F]
         """
-        dim_t = torch.arange(0, self.rnn_unit // 2, device=delta_t.device).float()
-        div_term = 10000 ** (2 * dim_t / self.rnn_unit).float()
-        sin_term = torch.sin(delta_t.unsqueeze(-1) / div_term)  # [N, N, F/2]
-        cos_term = torch.cos(delta_t.unsqueeze(-1) / div_term)  # [N, N, F/2]
-        return torch.cat([sin_term, cos_term], dim=-1)  # [N, N, F]
+     
+        indices = (delta_t + self.T - 1).long()  # [N, N]
+      
+        time_enc = self.PE[indices]  # [N, N, F]
+        return time_enc
 
     def top_k_selection(self, scores):
         """
-        Top-K 
-        :param scores:  [N, N, L]
-        :return:  [N, N, L] 
+        Top-K 策略
+        :param scores: 匹配分数 [N, N, L]
+        :return: 经过 Top-K 筛选的分数 [N, N, L] 和路径掩码
         """
         _, indices = torch.topk(scores, self.Top_K, dim=-1)  # [N, N, Top_K]
         mask = torch.zeros_like(scores).scatter_(-1, indices, 1.0)  # [N, N, L]
@@ -91,10 +114,10 @@ class ConditionGraphRoutingNetwork(nn.Module):
 
     def forward(self, V, Delta_t, E):
         """
-        :param V:  [N, F]
-        :param Delta_t:  [N, N]
-        :param E:  [N, N]
-        :return:  [N, F']
+        :param V: 节点特征 [N, F]
+        :param Delta_t: 滞后矩阵 [N, N]
+        :param E: 邻接矩阵 [N, N]
+        :return: 更新后的节点特征 [N, F']
         """
         N = V.size(0)
         time_enc = self.time_encoding(Delta_t)  # [N, N, F]
@@ -105,20 +128,20 @@ class ConditionGraphRoutingNetwork(nn.Module):
         feature_concat = torch.cat([V_i, V_j, time_enc], dim=-1).float()  # [N, N, 3F]
         scores = F.leaky_relu(torch.matmul(feature_concat, self.W_a.T))  # [N, N, L]
 
-        
+       
         scores, mask = self.top_k_selection(scores)  # [N, N, L]
         scores_exp = torch.exp(scores) * mask  # [N, N, L]
         scores_sum = scores_exp.sum(dim=-1, keepdim=True) + 1e-8  # [N, N, 1]
-        p = scores_exp / scores_sum  # [N, N, L]，
+        p = scores_exp / scores_sum  # [N, N, L]，对应 p_{i,j}^l
 
-      
+       
         messages = torch.zeros(N, N, self.n_hid, device=V.device)  # [N, N, F']
         for k in range(self.K):
-            if mask[..., k].any():  
+            if mask[..., k].any(): 
                 H_k = self.gat_layers[k](V, E, time_enc)  # [N, N, F']
                 messages += (E.unsqueeze(-1) * mask[..., k].unsqueeze(-1)) * (p[..., k].unsqueeze(-1) * H_k)
 
-    
+
         V_out = messages.sum(dim=1)  # [N, F']
         return V_out
 
@@ -160,21 +183,6 @@ class NoiseAwareRelationInference(nn.Module):
 
         filtered_E = torch.where(E >= threshold, E, torch.zeros_like(E))
         return filtered_E
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -233,9 +241,7 @@ class DynamicLeadLagModel(nn.Module):
 
 
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
 
 class TemporalChannelInteractionFusionModule(nn.Module):
     def __init__(self, feature_dim, rnn_unit, time_steps, n_hid):
