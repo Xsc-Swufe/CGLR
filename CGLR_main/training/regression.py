@@ -18,18 +18,18 @@ logging.basicConfig(filename="output.log", level=logging.DEBUG)
 parser = argparse.ArgumentParser()
 
 
-parser.add_argument('--seed', type=int, default=2025, help='Random seed.')
+parser.add_argument('--seed', type=int, default=2023, help='Random seed.')
 parser.add_argument('--patience', type=int, default=30, help='Patience.')
 parser.add_argument('--accumulation_steps', type=int, default=64, help='Gradient Accumulation.')
-parser.add_argument('-length', default=12,
+parser.add_argument('-length', default=15,
                         help='length of historical sequence for feature')
 
-parser.add_argument('-feature', default=9, help='input_size') 
+parser.add_argument('-feature', default=9, help='input_size')
 parser.add_argument('-n_class', default=1, help='output_size')
 parser.add_argument('-epoch', type=int, default=300)
 parser.add_argument('-batch_size', type=int, default=32)
 
-parser.add_argument('--rnn_unit', type=int, default=32, help='Number of hidden units.')
+parser.add_argument('--rnn_unit', type=int, default=50, help='Number of rnn hidden units.')
 parser.add_argument('-d_model', type=int, default=16)
 
 
@@ -38,8 +38,8 @@ parser.add_argument('-dropout', type=float, default=0.50
                         )
 parser.add_argument('-proj_share_weight', default='True')
 
-parser.add_argument('-log', default='../10_days/lstm+trans+HGAT3_5_valid1')
-parser.add_argument('-save_model', default='../10_days/lstm+HGAT3_5_valid1')
+parser.add_argument('-log', default='../10_days/CGLR_valid1')
+parser.add_argument('-save_model', default='../10_days/CGLR_valid1')
 parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
 
 parser.add_argument('-no_cuda', action='store_true')
@@ -66,7 +66,14 @@ parser.add_argument('--soft-training', type=int, default='0',
 
 parser.add_argument('--use_hidden_rel', type=int, default='1',
                         help='use hidden relationship or not')
+parser.add_argument('--max_step', type=int, default='10',
+                        help='Lead-lag max step')
 
+parser.add_argument('--num_path', type=int, default='10',
+                        help='Number of message passing path')
+
+parser.add_argument('--top_k', type=int, default='6',
+                        help='Top-k of message passing path')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -80,9 +87,9 @@ if args.cuda:
 
 args.cuda = not args.no_cuda
 device = torch.device('cuda' if args.cuda else 'cpu')
-
+# load data
+# features shape: [Days, Firms, Dimension of features]
 features, labels = load_data()
-
 features = torch.tensor(features, dtype=torch.float32)
 labels = torch.tensor(labels, dtype=torch.float32)
 features = features.to(device)
@@ -90,6 +97,9 @@ labels = labels.to(device)
 labels = torch.transpose(labels, 1, 0)
 labels = labels*100
 
+
+# Model and optimizer
+# Split data
 rnn_length = args.length
 train_end_time = int(len(features)*0.7)
 val_end_time = int(len(features)*0.9)
@@ -108,8 +118,10 @@ model = CGLR(
         d_word_vec=args.d_word_vec,
         dropout=args.dropout,
         use_hidden_rel=args.use_hidden_rel,
-        window_size = args.length
-
+        window_size = args.length,
+        max_step =  args.max_step,
+        num_path = args.num_path,
+        top_k = args.top_k
     )
 
 optimizer = optim.Adam(model.parameters(),
@@ -123,17 +135,17 @@ model.to(torch.float)
 model = model.to(device)
 
 
-lag_matrix, lead_lag_diff = compute_lead_lag(X_train, 10)
+lag_matrix, lead_lag_diff = compute_lead_lag(X_train, args.max_step)
 lag_matrix = torch.tensor(lag_matrix).to('cuda')
 lead_lag_diff = torch.tensor(lead_lag_diff).to('cuda')
 
 
-lag_matrix2, lead_lag_diff2 = compute_lead_lag(X_eval, 10)
+lag_matrix2, lead_lag_diff2 = compute_lead_lag(X_eval, args.max_step)
 lag_matrix2 = torch.tensor(lag_matrix2).to('cuda')
 lead_lag_diff2 = torch.tensor(lead_lag_diff2).to('cuda')
 
 
-lag_matrix3, lead_lag_diff3 = compute_lead_lag(X_test, 10)
+lag_matrix3, lead_lag_diff3 = compute_lead_lag(X_test, args.max_step)
 lag_matrix3 = torch.tensor(lag_matrix3).to('cuda')
 lead_lag_diff3 = torch.tensor(lead_lag_diff3).to('cuda')
 
@@ -179,7 +191,6 @@ def train(epoch, lag_matrix, lead_lag_diff, lag_matrix2, lead_lag_diff2):
     mse_val = metrics.mean_squared_error(np.array(phase_label_val), np.array(phase_pred_val))
     r2_val = R2_score_calculate(np.array(phase_label_val), np.array(phase_pred_val))
     rank_ic_val, rank_ic_ir_val = IC_ICIR_score_calculate(phase_label_val, phase_pred_val, len(eval_seq))
-
 
     return total_loss / count_train, mse_val, r2_val, rank_ic_val, rank_ic_ir_val
 
@@ -245,8 +256,10 @@ for epoch in range(args.epoch):
 print("Optimization Finished!")
 print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
+
 print('Loading {}th epoch'.format(best_epoch))
 model.load_state_dict(torch.load('{}.pkl'.format(best_epoch)))
+
 
 final_mse_test, final_r2_test, final_rank_ic_test, final_rank_ic_ir_test = compute_test(
     lag_matrix3, lead_lag_diff3
