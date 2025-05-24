@@ -83,7 +83,7 @@ class ConditionGraphRoutingNetwork(nn.Module):
         :return: PE [2T-1, F]
         """
 
-        positions = torch.arange(-self.T + 1, self.T, dtype=torch.float32)  # [2T-1]
+        positions = torch.arange(0, 2*self.T-1, dtype=torch.float32)  # [2T-1]
         dim_t = torch.arange(0, self.rnn_unit // 2, dtype=torch.float32)  # [F/2]
         div_term = 10000 ** (2 * dim_t / self.rnn_unit)  # [F/2]
         sin_term = torch.sin(positions.unsqueeze(-1) / div_term)  # [2T-1, F/2]
